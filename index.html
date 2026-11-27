@@ -8,10 +8,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Kurz">
-  <link rel="manifest" href="./manifest.json">
+  <link rel="manifest" href="./manifest.json?v=1.2.0">
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192x192.png">
   <link rel="apple-touch-icon" href="./icon-192x192.png">
-  <title>Kurz v1.1.1 — Offline PWA</title>
+    <title>Kurz v1.2.0 — Offline PWA</title>
   <style>
     /* ==========================================================================
        1. DESIGN TOKENS & AMOLED / LIGHT THEME
@@ -1548,6 +1548,10 @@
       <span class="header-tab-spacer" aria-hidden="true"></span>
       <button class="icon-btn" id="headerInstallBtn" onclick="triggerPwaInstall()" title="Nainstalovat aplikaci Kurz" style="display:none;border-color:var(--primary);color:var(--primary);">
         📲
+      </button>
+      <button class="icon-btn" id="headerCloudSyncBtn" onclick="openCloudSyncModal()" title="Přihlášení Firebase & živé sdílení cesty" style="position:relative;">
+        ☁️
+        <span id="kurzCloudDot" style="position:absolute;top:8px;right:8px;width:9px;height:9px;border-radius:50%;background:#64748b;border:1.5px solid var(--bg-elevated);"></span>
       </button>
       <button class="icon-btn" onclick="openSearchModal()" title="Rychlé vyhledávání napříč celou cestou">
         🔍
@@ -3571,6 +3575,104 @@
   </div>
 </div>
 
+<!-- ==========================================================================
+     MODÁL: FIREBASE PŘIHLÁŠENÍ & ŽIVÉ SDÍLENÍ CESTY (LIMIT 1 MB FIRESTORE)
+     ========================================================================== -->
+<div id="cloudSyncModal" class="modal-backdrop" onclick="if(event.target===this)closeModal('cloudSyncModal')">
+  <div class="modal-sheet">
+    <div class="card-header">
+      <div class="card-title">☁️ Cloud Sync & Sdílení cesty</div>
+      <button type="button" class="btn btn-sm" onclick="closeModal('cloudSyncModal')">Zavřít</button>
+    </div>
+
+    <!-- Stav přihlášení přes Google -->
+    <div class="card" style="border-left:4px solid var(--primary);">
+      <div class="card-header" style="margin-bottom:8px;">
+        <div class="card-title" style="font-size:15px;">👤 Google účet (Firebase)</div>
+        <span class="badge" id="kurzFbStatusBadge">Odhlášeno</span>
+      </div>
+
+      <div id="kurzFbUserCard" style="display:none;align-items:center;gap:10px;padding:9px 11px;border-radius:12px;background:var(--bg-elevated);border:1px solid var(--border);margin-bottom:10px;">
+        <img id="kurzFbAvatar" src="" alt="Avatar" style="width:40px;height:40px;border-radius:50%;object-fit:cover;border:1px solid var(--border-highlight);">
+        <div style="flex:1;min-width:0;">
+          <div id="kurzFbName" style="font-weight:800;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">--</div>
+          <div id="kurzFbEmail" style="font-size:11.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">--</div>
+        </div>
+      </div>
+
+      <button type="button" id="kurzFbAuthBtn" class="btn btn-primary btn-block" onclick="window.KurzFirebase?.handleAuthAction()">
+        🔐 Přihlásit se přes Google
+      </button>
+    </div>
+
+    <!-- Ovládání sdílení aktivní cesty (viditelné po přihlášení) -->
+    <div id="kurzFbControlsWrap" style="display:none;">
+      <!-- Ukazatel limitu 1 MB Firestore -->
+      <div class="card" style="border-left:4px solid var(--accent);">
+        <div class="card-header" style="margin-bottom:6px;">
+          <div class="card-title" style="font-size:14px;">📦 Velikost cesty pro Firestore</div>
+          <span class="badge primary" id="kurzCloudSizeBadge">0 KB / 920 KB</span>
+        </div>
+        <div class="progress-bar-wrap" style="margin-bottom:6px;">
+          <div class="progress-bar-fill" id="kurzCloudSizeBar" style="width:2%;"></div>
+        </div>
+        <div style="font-size:11.5px;color:var(--text-muted);" id="kurzCloudSizeHint">
+          Kvůli limitu Firebase 1 MB se synchronizuje itinerář, finance, kódy a texty kroniky. Fotky zůstávají lokálně v zařízení.
+        </div>
+      </div>
+
+      <!-- Sdílení aktivní cesty -->
+      <div class="card" style="border-left:4px solid var(--success);">
+        <div class="card-header" style="margin-bottom:8px;">
+          <div>
+            <div class="card-title" style="font-size:15px;">🌍 Sdílení aktivní cesty</div>
+            <div style="font-size:11px;color:var(--text-muted);" id="kurzCloudTripNameLbl">--</div>
+          </div>
+          <span class="badge" id="kurzTripSharedBadge">Jen lokálně</span>
+        </div>
+
+        <div id="kurzTripShareCodeBox" style="display:none;background:var(--bg-elevated);padding:10px 12px;border-radius:12px;border:1px solid var(--border-highlight);margin-bottom:10px;">
+          <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:4px;">Kód cesty pro spolucestující:</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <code id="kurzTripShareCodeText" style="font-size:18px;font-weight:900;letter-spacing:2px;color:var(--primary);">------</code>
+            <button type="button" class="btn btn-sm" style="min-height:36px;" onclick="window.KurzFirebase?.copyShareCode()">📋 Kopírovat kód</button>
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label>✉️ Google e-maily spolucestujících (oddělené čárkou)</label>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="kurzCloudEmailsInput" class="form-control" style="min-height:42px;font-size:13px;" placeholder="petr@gmail.com, jana@gmail.com">
+            <button type="button" class="btn btn-sm btn-primary" style="min-height:42px;" onclick="window.KurzFirebase?.saveInvitedEmails()">Uložit</button>
+          </div>
+        </div>
+
+        <div class="grid-2" style="margin-top:8px;">
+          <button type="button" class="btn btn-primary" id="kurzPushCloudBtn" onclick="window.KurzFirebase?.shareAndSyncActiveTrip(true)">
+            ☁️ Sdílet / Odeslat cestu
+          </button>
+          <button type="button" class="btn btn-danger" id="kurzUnshareCloudBtn" style="display:none;" onclick="window.KurzFirebase?.disableCloudForActiveTrip()">
+            🔌 Odpojit z cloudu
+          </button>
+        </div>
+      </div>
+
+      <!-- Připojení k cizí cestě zadáním kódu -->
+      <div class="card">
+        <div class="card-title" style="font-size:15px;margin-bottom:8px;">🔗 Připojit se k sdílené cestě</div>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="kurzJoinCodeInput" maxlength="10" class="form-control" style="text-transform:uppercase;font-family:monospace;font-weight:900;letter-spacing:1.5px;" placeholder="Zadejte kód (např. SIC26A)">
+          <button type="button" class="btn btn-accent" onclick="window.KurzFirebase?.joinTripByCode()">Připojit</button>
+        </div>
+      </div>
+
+      <div id="kurzFbLastSyncLbl" style="text-align:center;font-size:11px;color:var(--text-muted);font-family:monospace;">
+        Připraveno k synchronizaci
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- SKRYTÁ OBLAST PRO @media print TISK / PDF -->
 <div id="printSummaryArea"></div>
 
@@ -3579,7 +3681,7 @@
    GLOBÁLNÍ PROMĚNNÉ & KONSTANTY
    ============================================================================ */
 const APP_NAME = 'Kurz';
-const APP_VERSION = '1.1.1';
+const APP_VERSION = '1.2.0';
 const STORAGE_KEY = 'TRAVEL_APP_DATA_V5';
 const THEME_KEY = 'TRAVEL_APP_THEME';
 const UI_LANG_KEY = 'KURZ_UI_LANG';
@@ -5622,7 +5724,7 @@ function resolveTodayActiveIndex() {
   todayActiveIdx = foundIdx >= 0 ? foundIdx : 0;
 }
 
-function saveState() {
+function saveState(skipCloud = false) {
   const serialized = JSON.stringify(appState);
   memoryStorageFallback = serialized;
   try {
@@ -5641,6 +5743,13 @@ function saveState() {
     }
   }
   updateStorageMeter();
+
+  if (!skipCloud && window.KurzFirebase && window.KurzFirebase.currentUser) {
+    const trip = getActiveTrip();
+    if (trip && trip.cloudShared && !trip.isTemplate) {
+      window.KurzFirebase.scheduleAutoSync(trip);
+    }
+  }
 }
 
 function getActiveTrip() {
@@ -6304,8 +6413,9 @@ function renderApp() {
   renderWalletSection(trip);
   renderPackingSection(trip);
   renderFinanceSection(trip);
-  renderOthersSection(trip);
+renderOthersSection(trip);
   updateStorageMeter();
+  if (typeof updateCloudSyncModalUI === 'function') updateCloudSyncModalUI();
   if (typeof applyUiLanguage === 'function') applyUiLanguage();
 }
 
@@ -13087,6 +13197,497 @@ window.addEventListener('DOMContentLoaded', () => {
   registerServiceWorker();
   setInterval(updateClocksAndCountdown, 1000);
 });
+</script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getAuth,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signOut
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  getDoc,
+  updateDoc,
+  collection,
+  query,
+  where,
+  onSnapshot,
+  arrayUnion,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDWlKHYc2M4kQ_rjDeEW7_reG8XcMCC1tM",
+  authDomain: "h5page-app.firebaseapp.com",
+  projectId: "h5page-app",
+  storageBucket: "h5page-app.firebasestorage.app",
+  messagingSenderId: "880447243523",
+  appId: "1:880447243523:web:78b61950628d4056db1536",
+  measurementId: "G-LBZW04FBC3"
+};
+
+const MAX_FIRESTORE_SAFE_BYTES = 920 * 1024; // Bezpečná rezerva pod 1 MB (1 048 576 B)
+const CROP_INCLUDE_LIMIT_BYTES = 820 * 1024; // B&W výřezy vstupenek jen do 820 KB
+
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const db = getFirestore(fbApp);
+const provider = new GoogleAuthProvider();
+
+function getUtf8Bytes(obj) {
+  return new TextEncoder().encode(JSON.stringify(obj)).length;
+}
+
+/**
+ * Připraví odlehčený objekt cesty do 1 MB pro Cloud Firestore:
+ * - Odstraní těžké base64 fotky (kronika, zavazadla, parkování, auto, pasy)
+ * - Ponechá všechny texty, itinerář, GPS, PIN/Wi-Fi, výdaje, split, lékárničku a textové kódy
+ * - Výřezy vstupenek (CROP) ponechá pouze pokud celková velikost nepřekročí 820 KB
+ */
+function buildCloudTripPayload(trip, user) {
+  const clone = JSON.parse(JSON.stringify(trip));
+  delete clone.isTemplate;
+
+  if (clone.parking) clone.parking.photoDataUrl = '';
+  if (clone.carLog) clone.carLog.damagePhotos = [];
+  if (Array.isArray(clone.documents)) {
+    clone.documents.forEach(d => { d.photo = ''; });
+  }
+  if (Array.isArray(clone.packing)) {
+    clone.packing.forEach(p => { p.photo = ''; });
+  }
+  if (Array.isArray(clone.days)) {
+    clone.days.forEach(day => {
+      day.photoDataUrl = '';
+      day.photoMeta = '';
+    });
+  }
+
+  let strippedCrops = false;
+  let bytes = getUtf8Bytes(clone);
+
+  if (bytes > CROP_INCLUDE_LIMIT_BYTES && Array.isArray(clone.wallet)) {
+    clone.wallet.forEach(w => {
+      if (w.croppedImage) {
+        w.croppedImage = '';
+        strippedCrops = true;
+      }
+    });
+    bytes = getUtf8Bytes(clone);
+  }
+
+  const uidSet = new Set(Array.isArray(clone.participantUids) ? clone.participantUids : []);
+  const emailSet = new Set(
+    (Array.isArray(clone.participantEmails) ? clone.participantEmails : [])
+      .map(e => String(e).trim().toLowerCase())
+      .filter(Boolean)
+  );
+
+  if (user) {
+    uidSet.add(user.uid);
+    if (user.email) emailSet.add(user.email.trim().toLowerCase());
+  }
+
+  clone.participantUids = Array.from(uidSet);
+  clone.participantEmails = Array.from(emailSet);
+  clone.cloudShared = true;
+  clone.lastSenderUid = user ? user.uid : '';
+  clone.tripUpdatedAt = Date.now();
+  clone.serverUpdatedAt = serverTimestamp();
+
+  return { payload: clone, bytes, strippedCrops };
+}
+
+window.openCloudSyncModal = function() {
+  window.updateCloudSyncModalUI();
+  openModal('cloudSyncModal');
+};
+
+window.updateCloudSyncModalUI = function() {
+  const user = window.KurzFirebase?.currentUser || null;
+  const dot = document.getElementById('kurzCloudDot');
+  const statusBadge = document.getElementById('kurzFbStatusBadge');
+  const userCard = document.getElementById('kurzFbUserCard');
+  const authBtn = document.getElementById('kurzFbAuthBtn');
+  const controlsWrap = document.getElementById('kurzFbControlsWrap');
+
+  if (dot) dot.style.background = user ? '#10b981' : '#64748b';
+
+  if (!user) {
+    if (statusBadge) {
+      statusBadge.textContent = 'Odhlášeno';
+      statusBadge.className = 'badge';
+    }
+    if (userCard) userCard.style.display = 'none';
+    if (controlsWrap) controlsWrap.style.display = 'none';
+    if (authBtn) {
+      authBtn.textContent = '🔐 Přihlásit se přes Google';
+      authBtn.className = 'btn btn-primary btn-block';
+    }
+    return;
+  }
+
+  if (statusBadge) {
+    statusBadge.textContent = 'Online';
+    statusBadge.className = 'badge success';
+  }
+  if (userCard) userCard.style.display = 'flex';
+  const av = document.getElementById('kurzFbAvatar');
+  if (av) av.src = user.photoURL || 'https://placehold.co/80x80/0284c7/ffffff?text=' + encodeURIComponent((user.displayName || 'U')[0]);
+  const nm = document.getElementById('kurzFbName');
+  if (nm) nm.textContent = user.displayName || 'Uživatel Google';
+  const em = document.getElementById('kurzFbEmail');
+  if (em) em.textContent = user.email || '';
+
+  if (authBtn) {
+    authBtn.textContent = '🚪 Odhlásit se z Google účtu';
+    authBtn.className = 'btn btn-danger btn-block';
+  }
+  if (controlsWrap) controlsWrap.style.display = 'block';
+
+  const trip = getActiveTrip();
+  if (!trip) return;
+
+  const { bytes, strippedCrops } = buildCloudTripPayload(trip, user);
+  const kb = (bytes / 1024).toFixed(1);
+  const pct = Math.min(100, (bytes / MAX_FIRESTORE_SAFE_BYTES) * 100);
+  const sizeBadge = document.getElementById('kurzCloudSizeBadge');
+  const sizeBar = document.getElementById('kurzCloudSizeBar');
+  const sizeHint = document.getElementById('kurzCloudSizeHint');
+
+  if (sizeBadge) {
+    sizeBadge.textContent = `${kb} KB / 920 KB`;
+    sizeBadge.className = bytes > MAX_FIRESTORE_SAFE_BYTES ? 'badge danger' : (pct > 75 ? 'badge accent' : 'badge primary');
+  }
+  if (sizeBar) {
+    sizeBar.style.width = `${Math.max(2, pct)}%`;
+    sizeBar.style.background = bytes > MAX_FIRESTORE_SAFE_BYTES ? 'var(--danger)' : (pct > 75 ? 'var(--accent)' : 'var(--primary)');
+  }
+  if (sizeHint && strippedCrops) {
+    sizeHint.textContent = 'ℹ️ Kvůli limitu 1 MB byly B&W obrázky výřezů vstupenek vynechány (textové kódy zůstávají).';
+  }
+
+  const tripNameLbl = document.getElementById('kurzCloudTripNameLbl');
+  if (tripNameLbl) tripNameLbl.textContent = trip.name;
+
+  const sharedBadge = document.getElementById('kurzTripSharedBadge');
+  const codeBox = document.getElementById('kurzTripShareCodeBox');
+  const codeText = document.getElementById('kurzTripShareCodeText');
+  const unshareBtn = document.getElementById('kurzUnshareCloudBtn');
+  const emailsInp = document.getElementById('kurzCloudEmailsInput');
+
+  if (emailsInp && document.activeElement !== emailsInp) {
+    const others = (trip.participantEmails || []).filter(e => e !== (user.email || '').toLowerCase());
+    emailsInp.value = others.join(', ');
+  }
+
+  if (trip.cloudShared) {
+    if (sharedBadge) {
+      sharedBadge.textContent = '☁️ Sdíleno živě';
+      sharedBadge.className = 'badge success';
+    }
+    if (codeBox) codeBox.style.display = 'block';
+    if (codeText) codeText.textContent = trip.syncCode || '------';
+    if (unshareBtn) unshareBtn.style.display = 'inline-flex';
+  } else {
+    if (sharedBadge) {
+      sharedBadge.textContent = 'Jen lokálně';
+      sharedBadge.className = 'badge';
+    }
+    if (codeBox) codeBox.style.display = 'none';
+    if (unshareBtn) unshareBtn.style.display = 'none';
+  }
+};
+
+function mergeRemoteTripIntoLocal(remoteTrip, myUid) {
+  if (!remoteTrip || !remoteTrip.id) return false;
+  remoteTrip.isTemplate = false;
+  remoteTrip.cloudShared = true;
+
+  const idx = appState.trips.findIndex(t => t.id === remoteTrip.id);
+  if (idx === -1) {
+    appState.trips.push(remoteTrip);
+    const cur = getActiveTrip();
+    if (cur && cur.isTemplate) {
+      appState.activeTripId = remoteTrip.id;
+      resolveTodayActiveIndex();
+    }
+    saveState(true);
+    renderApp();
+    showToast(`☁️ Načtena sdílená cesta „${remoteTrip.name}“`);
+    return true;
+  }
+
+  if (remoteTrip.lastSenderUid === myUid) return false;
+
+  const localTrip = appState.trips[idx];
+  const localDaysMap = new Map((localTrip.days || []).map(d => [d.date, d]));
+  const localPackMap = new Map((localTrip.packing || []).map(p => [p.id, p]));
+  const localDocsMap = new Map((localTrip.documents || []).map(d => [d.id, d]));
+  const localWalletMap = new Map((localTrip.wallet || []).map(w => [w.id, w]));
+
+  // Zachování lokálních fotek v zařízení při přepsání textových dat z cloudu
+  if (Array.isArray(remoteTrip.days)) {
+    remoteTrip.days.forEach(rDay => {
+      const lDay = localDaysMap.get(rDay.date);
+      if (lDay && lDay.photoDataUrl) {
+        rDay.photoDataUrl = lDay.photoDataUrl;
+        rDay.photoMeta = lDay.photoMeta || rDay.photoMeta || '';
+      }
+    });
+  }
+  if (Array.isArray(remoteTrip.packing)) {
+    remoteTrip.packing.forEach(rItem => {
+      const lItem = localPackMap.get(rItem.id);
+      if (lItem && lItem.photo) rItem.photo = lItem.photo;
+    });
+  }
+  if (Array.isArray(remoteTrip.documents)) {
+    remoteTrip.documents.forEach(rDoc => {
+      const lDoc = localDocsMap.get(rDoc.id);
+      if (lDoc && lDoc.photo) rDoc.photo = lDoc.photo;
+    });
+  }
+  if (Array.isArray(remoteTrip.wallet)) {
+    remoteTrip.wallet.forEach(rW => {
+      const lW = localWalletMap.get(rW.id);
+      if (!rW.croppedImage && lW && lW.croppedImage) {
+        rW.croppedImage = lW.croppedImage;
+      }
+    });
+  }
+  if (remoteTrip.parking && localTrip.parking && localTrip.parking.photoDataUrl) {
+    remoteTrip.parking.photoDataUrl = localTrip.parking.photoDataUrl;
+  }
+  if (remoteTrip.carLog && localTrip.carLog && Array.isArray(localTrip.carLog.damagePhotos)) {
+    remoteTrip.carLog.damagePhotos = localTrip.carLog.damagePhotos;
+  }
+
+  appState.trips[idx] = Object.assign({}, localTrip, remoteTrip);
+  saveState(true);
+  renderApp();
+  showToast(`☁️ Aktualizace cesty „${remoteTrip.name}“ od spolucestujících`);
+  return true;
+}
+
+window.KurzFirebase = {
+  currentUser: null,
+  unsubUid: null,
+  unsubEmail: null,
+  autoSyncTimer: null,
+
+  isStandalonePWA() {
+    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  },
+
+  async handleAuthAction() {
+    if (this.currentUser) {
+      this.stopListeners();
+      await signOut(auth);
+      showToast('🚪 Odhlášeno z Firebase');
+      return;
+    }
+    try {
+      if (this.isStandalonePWA()) {
+        await signInWithRedirect(auth, provider);
+      } else {
+        await signInWithPopup(auth, provider);
+      }
+    } catch (err) {
+      if (err.code !== 'auth/popup-closed-by-user') {
+        showToast('❌ Chyba přihlášení: ' + (err.code || err.message));
+      }
+    }
+  },
+
+  stopListeners() {
+    if (this.unsubUid) { this.unsubUid(); this.unsubUid = null; }
+    if (this.unsubEmail) { this.unsubEmail(); this.unsubEmail = null; }
+  },
+
+  startListeners() {
+    this.stopListeners();
+    if (!this.currentUser) return;
+    const uid = this.currentUser.uid;
+    const email = (this.currentUser.email || '').trim().toLowerCase();
+
+    const onSnap = (snapshot) => {
+      snapshot.docChanges().forEach(change => {
+        if (change.type === 'added' || change.type === 'modified') {
+          const remoteTrip = change.doc.data();
+          if (!remoteTrip || !remoteTrip.id) return;
+          if (uid && Array.isArray(remoteTrip.participantUids) && !remoteTrip.participantUids.includes(uid)) {
+            updateDoc(doc(db, 'kurz_trips', remoteTrip.id), {
+              participantUids: arrayUnion(uid)
+            }).catch(() => {});
+          }
+          mergeRemoteTripIntoLocal(remoteTrip, uid);
+        }
+      });
+    };
+
+    const qUid = query(collection(db, 'kurz_trips'), where('participantUids', 'array-contains', uid));
+    this.unsubUid = onSnapshot(qUid, onSnap, err => console.warn('Firestore UID listener:', err));
+
+    if (email) {
+      const qEmail = query(collection(db, 'kurz_trips'), where('participantEmails', 'array-contains', email));
+      this.unsubEmail = onSnapshot(qEmail, onSnap, err => console.warn('Firestore Email listener:', err));
+    }
+  },
+
+  scheduleAutoSync(trip) {
+    clearTimeout(this.autoSyncTimer);
+    this.autoSyncTimer = setTimeout(() => {
+      this.shareAndSyncActiveTrip(false, trip);
+    }, 900);
+  },
+
+  async shareAndSyncActiveTrip(manual = true, specificTrip = null) {
+    if (!this.currentUser) {
+      if (manual) showToast('⚠️ Nejprve se přihlaste přes Google');
+      return;
+    }
+    const trip = specificTrip || getActiveTrip();
+    if (!trip) return;
+
+    if (trip.isTemplate) {
+      trip.isTemplate = false;
+    }
+    if (!trip.syncCode) {
+      trip.syncCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    }
+
+    const { payload, bytes, strippedCrops } = buildCloudTripPayload(trip, this.currentUser);
+    if (bytes > MAX_FIRESTORE_SAFE_BYTES) {
+      showToast(`❌ Cesta má ${(bytes / 1024).toFixed(0)} KB a překračuje limit Firestore 1 MB!`);
+      window.updateCloudSyncModalUI();
+      return;
+    }
+
+    try {
+      trip.cloudShared = true;
+      trip.participantUids = payload.participantUids;
+      trip.participantEmails = payload.participantEmails;
+      saveState(true);
+
+      await setDoc(doc(db, 'kurz_trips', trip.id), payload, { merge: true });
+      await setDoc(doc(db, 'kurz_codes', trip.syncCode), {
+        tripId: trip.id,
+        name: trip.name || 'Cesta',
+        updatedAt: Date.now()
+      }, { merge: true });
+
+      const lbl = document.getElementById('kurzFbLastSyncLbl');
+      if (lbl) lbl.textContent = `Odesláno do cloudu: ${new Date().toLocaleTimeString('cs-CZ')} (${(bytes / 1024).toFixed(1)} KB)`;
+      window.updateCloudSyncModalUI();
+
+      if (manual) {
+        showToast(strippedCrops
+          ? `☁️ Sdíleno (${(bytes / 1024).toFixed(0)} KB; velké výřezy vynechány kvůli 1 MB)`
+          : `☁️ Cesta „${trip.name}“ uložena a sdílena (${(bytes / 1024).toFixed(0)} KB)`);
+      }
+    } catch (err) {
+      console.error('Chyba ukládání do Firestore:', err);
+      if (manual) showToast('❌ Chyba odeslání do Firebase: ' + (err.code || err.message));
+    }
+  },
+
+  saveInvitedEmails() {
+    const trip = getActiveTrip();
+    const raw = document.getElementById('kurzCloudEmailsInput')?.value || '';
+    const parsed = raw
+      .split(/[,;\s]+/)
+      .map(e => e.trim().toLowerCase())
+      .filter(e => e && e.includes('@'));
+
+    if (this.currentUser?.email) {
+      parsed.push(this.currentUser.email.trim().toLowerCase());
+    }
+    trip.participantEmails = Array.from(new Set(parsed));
+    this.shareAndSyncActiveTrip(true, trip);
+  },
+
+  copyShareCode() {
+    const trip = getActiveTrip();
+    if (trip && trip.syncCode) {
+      copyToClipboard(trip.syncCode, 'Kód cesty');
+    }
+  },
+
+  async joinTripByCode() {
+    if (!this.currentUser) {
+      showToast('⚠️ Nejprve se přihlaste přes Google');
+      return;
+    }
+    const inp = document.getElementById('kurzJoinCodeInput');
+    const code = (inp?.value || '').trim().toUpperCase();
+    if (!code) {
+      showToast('⚠️ Zadejte sdílený kód cesty');
+      return;
+    }
+
+    try {
+      const snap = await getDoc(doc(db, 'kurz_codes', code));
+      if (!snap.exists() || !snap.data().tripId) {
+        showToast('❌ Cesta s tímto kódem nebyla nalezena');
+        return;
+      }
+      const tripId = snap.data().tripId;
+      const upd = { participantUids: arrayUnion(this.currentUser.uid) };
+      if (this.currentUser.email) {
+        upd.participantEmails = arrayUnion(this.currentUser.email.trim().toLowerCase());
+      }
+      await updateDoc(doc(db, 'kurz_trips', tripId), upd);
+      if (inp) inp.value = '';
+      showToast(`✅ Připojeno k cestě ${code}! Načítám data...`);
+      this.startListeners();
+    } catch (err) {
+      console.error('Chyba připojení ke sdílené cestě:', err);
+      showToast('❌ Nepodařilo se připojit (zkontrolujte kód a pravidla Firestore)');
+    }
+  },
+
+  disableCloudForActiveTrip() {
+    const trip = getActiveTrip();
+    if (!trip) return;
+    trip.cloudShared = false;
+    saveState(true);
+    window.updateCloudSyncModalUI();
+    showToast('🔌 Cesta byla přepnuta pouze do lokálního režimu');
+  }
+};
+
+getRedirectResult(auth).catch(err => console.warn('Redirect auth:', err));
+
+onAuthStateChanged(auth, (user) => {
+  window.KurzFirebase.currentUser = user;
+  window.updateCloudSyncModalUI();
+  if (user) {
+    window.KurzFirebase.startListeners();
+  } else {
+    window.KurzFirebase.stopListeners();
+  }
+});
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./service-worker.js?v=' + APP_VERSION, { scope: './' })
+      .then((reg) => {
+        reg.update().catch(() => {});
+      })
+      .catch((err) => {
+        console.warn('Service Worker registrace selhala:', err);
+      });
+  });
+}
 </script>
 </body>
 </html>

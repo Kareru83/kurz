@@ -1,88 +1,121 @@
-const CACHE_NAME = 'Kurz-v1.1.1';
+const CACHE_NAME = 'kurz-app-v1.2.0';
+const FIREBASE_SDK_CACHE = 'kurz-firebase-sdk-v10.12.2';
 
-const CORE_ASSETS = [
+// Soubory aplikace (při instalaci se uloží ty, které na serveru reálně existují)
+const APP_SHELL_CANDIDATES = [
   './',
   './index.html',
+  './kurz_v1_2_0.html',
   './manifest.json',
-  './icon-192x192.png',
-  './icon-512x512.png'
+  './icon-192x192.png'
 ];
 
-// Instalace — uložení všech základních offline souborů do cache
+// Moduly Firebase SDK používané v aplikaci Kurz
+const FIREBASE_SDK_URLS = [
+  'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js',
+  'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js',
+  'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js'
+];
+
+// Domény, které Service Worker nesmí cachovat ani blokovat
+const BYPASS_HOST_PATTERNS = [
+  'firestore.googleapis.com',
+  'identitytoolkit.googleapis.com',
+  'securetoken.googleapis.com',
+  'firebase.googleapis.com',
+  'firebaseinstallations.googleapis.com',
+  'accounts.google.com',
+  'apis.google.com',
+  '.firebaseio.com',
+  '.firebaseapp.com'
+];
+
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) =>
-        Promise.allSettled(
-          CORE_ASSETS.map((url) =>
-            cache.add(url).catch((err) => console.warn('Kurz SW: Nepodařilo se kešovat:', url, err))
-          )
-        )
-      )
-      .then(() => self.skipWaiting())
-  );
-});
-
-// Aktivace — smazání starých verzí cache
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys()
-      .then((cacheNames) =>
-        Promise.all(
-          cacheNames.map((name) => (name !== CACHE_NAME ? caches.delete(name) : null))
-        )
-      )
-      .then(() => self.clients.claim())
-  );
-});
-
-// Podpora okamžité aktivace po kliknutí na "Zkontrolovat aktualizaci"
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-});
-
-// Zachytávání požadavků: Network-First pro HTML, Cache-First pro statické soubory
-self.addEventListener('fetch', (event) => {
-  const req = event.request;
-  if (req.method !== 'GET') return;
-
-  const url = new URL(req.url);
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
-
-  // Hlavní dokument: Network-First s offline fallbackem
-  if (req.mode === 'navigate' || url.pathname.endsWith('/index.html') || url.pathname.endsWith('/')) {
-    event.respondWith(
-      fetch(req)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.ok) {
-            const copy = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put('./index.html', copy));
-          }
-          return networkResponse;
-        })
-        .catch(() => caches.match('./index.html').then((cached) => cached || caches.match('./')))
+  event.waitUntil((async () => {
+    const appCache = await caches.open(CACHE_NAME);
+    await Promise.allSettled(
+      APP_SHELL_CANDIDATES.map((url) => appCache.add(url))
     );
+
+    const sdkCache = await caches.open(FIREBASE_SDK_CACHE);
+    await Promise.allSettled(
+      FIREBASE_SDK_URLS.map((url) => sdkCache.add(url))
+    );
+
+    await self.skipWaiting();
+  })());
+});
+
+self.addEventListener('activate', (event) => {
+  const validCaches = new Set([CACHE_NAME, FIREBASE_SDK_CACHE]);
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(
+      keys
+        .filter((key) => !validCaches.has(key))
+        .map((key) => caches.delete(key))
+    );
+    await self.clients.claim();
+  })());
+});
+
+self.addEventListener('fetch', (event) => {
+  const { request } = event;
+
+  // Zpracováváme pouze GET požadavky (POST/PUT pro Firestore a Auth jdou přímo na síť)
+  if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
+
+  // 1. Nikdy nezachytávat OAuth přesměrování Firebase Auth (důležité pro signInWithRedirect v PWA)
+  if (url.pathname.startsWith('/__/auth') || url.pathname.startsWith('/__/firebase')) {
     return;
   }
 
-  // Ikony, manifest a ostatní lokální zdroje: Cache-First
-  event.respondWith(
-    caches.match(req, { ignoreSearch: true }).then((cachedResponse) => {
-      if (cachedResponse) return cachedResponse;
+  // 2. Nikdy nezachytávat živé API volání Google / Firebase
+  if (BYPASS_HOST_PATTERNS.some((host) => url.hostname === host || url.hostname.endsWith(host))) {
+    return;
+  }
 
-      return fetch(req)
-        .then((networkResponse) => {
-          if (networkResponse && networkResponse.ok) {
-            const copy = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
-          }
-          return networkResponse;
-        })
-        .catch(() => {
-          console.warn('Kurz SW: Zdroj není dostupný offline:', req.url);
-        });
-    })
-  );
+  // 3. Firebase SDK z gstatic.com -> Cache-First (uloží i případné interní sub-moduly)
+  if (url.origin === 'https://www.gstatic.com' && url.pathname.startsWith('/firebasejs/')) {
+    event.respondWith((async () => {
+      const cache = await caches.open(FIREBASE_SDK_CACHE);
+      const cached = await cache.match(request);
+      if (cached) return cached;
+
+      const networkResponse = await fetch(request);
+      if (networkResponse && networkResponse.ok) {
+        cache.put(request, networkResponse.clone());
+      }
+      return networkResponse;
+    })());
+    return;
+  }
+
+  // 4. Vlastní soubory aplikace (same-origin) -> Network-First s offline zálohou
+  if (url.origin === self.location.origin) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
+      try {
+        const networkResponse = await fetch(request);
+        if (networkResponse && networkResponse.ok) {
+          cache.put(request, networkResponse.clone());
+        }
+        return networkResponse;
+      } catch (err) {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+
+        if (request.mode === 'navigate') {
+          return (
+            (await cache.match('./')) ||
+            (await cache.match('./index.html')) ||
+            (await cache.match('./kurz_v1_2_0.html'))
+          );
+        }
+        throw err;
+      }
+    })());
+  }
 });
