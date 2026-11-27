@@ -8,10 +8,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Kurz">
-  <link rel="manifest" href="./manifest.json?v=2.0.1">
+  <link rel="manifest" href="./manifest.json?v=2.0.2">
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192x192.png">
   <link rel="apple-touch-icon" href="./icon-192x192.png">
-  <title>Kurz v2.0.1 — Offline PWA</title>
+  <title>Kurz v2.0.2 — Offline PWA</title>
   <style>
     /* ==========================================================================
        1. DESIGN TOKENS & AMOLED / LIGHT THEME
@@ -2606,7 +2606,7 @@
 
 <!-- Informace o verzi a aplikaci -->
     <div style="text-align:center;padding:12px 6px;margin-top:6px;font-size:11.5px;color:var(--text-dim);font-weight:700;">
-      <span>Kurz</span> • <span class="badge primary" style="font-size:11px;padding:1px 7px;">verze 2.0.1</span> • <span>100% Offline PWA</span>
+      <span>Kurz</span> • <span class="badge primary" style="font-size:11px;padding:1px 7px;">verze 2.0.2</span> • <span>100% Offline PWA</span>
     </div>
   </section>
 
@@ -2670,7 +2670,7 @@
     <div class="card-header">
       <div class="card-title">
         <span>🌍 Správa cest</span>
-        <span class="badge primary" style="font-size:11px;">v2.0.1</span>
+        <span class="badge primary" style="font-size:11px;">v2.0.2</span>
       </div>
       <button class="btn btn-sm" onclick="closeModal('tripModal')">Zavřít</button>
     </div>
@@ -3531,7 +3531,7 @@
     <div class="card-header">
         <div class="card-title">💾 Paměť LocalStorage & JSON Záloha</div>
         <div style="display:flex;gap:6px;align-items:center;">
-          <span class="badge primary">v2.0.1</span>
+          <span class="badge primary">v2.0.2</span>
           <span class="badge" id="storageDetailBadge">0 KB / 5120 KB</span>
         </div>
       </div>
@@ -3681,7 +3681,7 @@
    GLOBÁLNÍ PROMĚNNÉ & KONSTANTY
    ============================================================================ */
 const APP_NAME = 'Kurz';
-const APP_VERSION = '2.0.1';
+const APP_VERSION = '2.0.2';
 const STORAGE_KEY = 'TRAVEL_APP_DATA_V5';
 const THEME_KEY = 'TRAVEL_APP_THEME';
 const UI_LANG_KEY = 'KURZ_UI_LANG';
@@ -11925,6 +11925,11 @@ function deleteTrip(id) {
   const t = appState.trips.find(x => x.id === id);
   const wasTemplate = !!(t && t.isTemplate);
 
+  if (!Array.isArray(appState.deletedTripIds)) appState.deletedTripIds = [];
+  if (!appState.deletedTripIds.includes(id)) {
+    appState.deletedTripIds.push(id);
+  }
+
   appState.trips = appState.trips.filter(x => x.id !== id);
   if (appState.activeTripId === id) {
     appState.activeTripId = getSmartActiveTripId(appState.trips, null, true);
@@ -11933,10 +11938,15 @@ function deleteTrip(id) {
     resolveTodayActiveIndex();
   }
 
-  saveState();
+  saveState(true);
   renderTripModalList();
   renderApp();
-  showToast(wasTemplate ? '🗑️ Vzorová cesta smazána' : '🗑️ Cesta smazána');
+
+  if (t && !wasTemplate && window.KurzFirebase && window.KurzFirebase.currentUser) {
+    window.KurzFirebase.deleteTripFromCloud(t);
+  } else {
+    showToast(wasTemplate ? '🗑️ Vzorová cesta smazána' : '🗑️ Cesta smazána');
+  }
 }
 
 /* ============================================================================
@@ -13215,6 +13225,7 @@ import {
   setDoc,
   getDoc,
   updateDoc,
+  deleteDoc,
   collection,
   query,
   where,
@@ -13408,6 +13419,12 @@ window.updateCloudSyncModalUI = function() {
 
 function mergeRemoteTripIntoLocal(remoteTrip, myUid) {
   if (!remoteTrip || !remoteTrip.id) return false;
+  if (Array.isArray(appState.deletedTripIds) && appState.deletedTripIds.includes(remoteTrip.id)) {
+    if (window.KurzFirebase?.currentUser) {
+      window.KurzFirebase.deleteTripFromCloud(remoteTrip);
+    }
+    return false;
+  }
   remoteTrip.isTemplate = false;
   remoteTrip.cloudShared = true;
 
@@ -13681,6 +13698,21 @@ window.KurzFirebase = {
     saveState(true);
     window.updateCloudSyncModalUI();
     showToast('🔌 Cesta byla přepnuta pouze do lokálního režimu');
+  },
+
+  async deleteTripFromCloud(trip) {
+    if (!this.currentUser || !trip || !trip.id) return;
+    try {
+      await deleteDoc(doc(db, 'kurz_trips', trip.id));
+      if (trip.syncCode) {
+        await deleteDoc(doc(db, 'kurz_codes', String(trip.syncCode).trim().toUpperCase())).catch(() => {});
+      }
+      if (typeof showToast === 'function') {
+        showToast(`☁️ Cesta „${trip.name}“ smazána i z cloudu`);
+      }
+    } catch (err) {
+      console.warn('Chyba při mazání cesty z Firestore:', err);
+    }
   }
 };
 
