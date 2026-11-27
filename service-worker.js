@@ -1,11 +1,11 @@
-const CACHE_NAME = 'kurz-app-v1.2.0';
+const CACHE_NAME = 'kurz-app-v2.0.0';
 const FIREBASE_SDK_CACHE = 'kurz-firebase-sdk-v10.12.2';
 
 // Soubory aplikace (při instalaci se uloží ty, které na serveru reálně existují)
 const APP_SHELL_CANDIDATES = [
   './',
   './index.html',
-  './kurz_v1_2_0.html',
+  './kurz_v2_0_0.html',
   './manifest.json',
   './icon-192x192.png'
 ];
@@ -107,11 +107,11 @@ self.addEventListener('fetch', (event) => {
         const cached = await cache.match(request);
         if (cached) return cached;
 
-        if (request.mode === 'navigate') {
+if (request.mode === 'navigate') {
           return (
             (await cache.match('./')) ||
             (await cache.match('./index.html')) ||
-            (await cache.match('./kurz_v1_2_0.html'))
+            (await cache.match('./kurz_v2_0_0.html'))
           );
         }
         throw err;
