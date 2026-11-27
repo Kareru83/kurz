@@ -8,10 +8,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Kurz">
-  <link rel="manifest" href="./manifest.json?v=2.0.0">
+  <link rel="manifest" href="./manifest.json?v=2.0.1">
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192x192.png">
   <link rel="apple-touch-icon" href="./icon-192x192.png">
-  <title>Kurz v2.0.0 — Offline PWA</title>
+  <title>Kurz v2.0.1 — Offline PWA</title>
   <style>
     /* ==========================================================================
        1. DESIGN TOKENS & AMOLED / LIGHT THEME
@@ -2606,7 +2606,7 @@
 
 <!-- Informace o verzi a aplikaci -->
     <div style="text-align:center;padding:12px 6px;margin-top:6px;font-size:11.5px;color:var(--text-dim);font-weight:700;">
-      <span>Kurz</span> • <span class="badge primary" style="font-size:11px;padding:1px 7px;">verze 2.0.0</span> • <span>100% Offline PWA</span>
+      <span>Kurz</span> • <span class="badge primary" style="font-size:11px;padding:1px 7px;">verze 2.0.1</span> • <span>100% Offline PWA</span>
     </div>
   </section>
 
@@ -2670,7 +2670,7 @@
     <div class="card-header">
       <div class="card-title">
         <span>🌍 Správa cest</span>
-        <span class="badge primary" style="font-size:11px;">v2.0.0</span>
+        <span class="badge primary" style="font-size:11px;">v2.0.1</span>
       </div>
       <button class="btn btn-sm" onclick="closeModal('tripModal')">Zavřít</button>
     </div>
@@ -3531,7 +3531,7 @@
     <div class="card-header">
         <div class="card-title">💾 Paměť LocalStorage & JSON Záloha</div>
         <div style="display:flex;gap:6px;align-items:center;">
-          <span class="badge primary">v2.0.0</span>
+          <span class="badge primary">v2.0.1</span>
           <span class="badge" id="storageDetailBadge">0 KB / 5120 KB</span>
         </div>
       </div>
@@ -3681,7 +3681,7 @@
    GLOBÁLNÍ PROMĚNNÉ & KONSTANTY
    ============================================================================ */
 const APP_NAME = 'Kurz';
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.0.1';
 const STORAGE_KEY = 'TRAVEL_APP_DATA_V5';
 const THEME_KEY = 'TRAVEL_APP_THEME';
 const UI_LANG_KEY = 'KURZ_UI_LANG';
@@ -13483,26 +13483,46 @@ window.KurzFirebase = {
   unsubEmail: null,
   autoSyncTimer: null,
 
-  isStandalonePWA() {
-    return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  },
+  isSigningIn: false,
 
   async handleAuthAction() {
+    if (this.isSigningIn) return;
+    const btn = document.getElementById('kurzFbAuthBtn');
+
     if (this.currentUser) {
       this.stopListeners();
       await signOut(auth);
       showToast('🚪 Odhlášeno z Firebase');
       return;
     }
+
+    this.isSigningIn = true;
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ Přihlašuji přes Google...';
+    }
+
     try {
-      if (this.isStandalonePWA()) {
-        await signInWithRedirect(auth, provider);
-      } else {
-        await signInWithPopup(auth, provider);
-      }
+      await signInWithPopup(auth, provider);
+      showToast('✅ Přihlášení úspěšné');
     } catch (err) {
-      if (err.code !== 'auth/popup-closed-by-user') {
+      if (err.code === 'auth/popup-blocked') {
+        try {
+          await signInWithRedirect(auth, provider);
+          return;
+        } catch (redErr) {
+          showToast('❌ Chyba přesměrování: ' + (redErr.code || redErr.message));
+        }
+      } else if (err.code === 'auth/unauthorized-domain') {
+        showToast('❌ Doména ' + window.location.hostname + ' není povolena ve Firebase Console!');
+      } else if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
         showToast('❌ Chyba přihlášení: ' + (err.code || err.message));
+      }
+    } finally {
+      this.isSigningIn = false;
+      if (btn) {
+        btn.disabled = false;
+        window.updateCloudSyncModalUI();
       }
     }
   },
@@ -13664,7 +13684,14 @@ window.KurzFirebase = {
   }
 };
 
-getRedirectResult(auth).catch(err => console.warn('Redirect auth:', err));
+getRedirectResult(auth)
+  .then(res => {
+    if (res && res.user) showToast('✅ Přihlášeno jako ' + (res.user.displayName || res.user.email));
+  })
+  .catch(err => {
+    console.warn('Redirect auth:', err);
+    showToast('❌ Chyba dokončení přihlášení: ' + (err.code || err.message));
+  });
 
 onAuthStateChanged(auth, (user) => {
   window.KurzFirebase.currentUser = user;
@@ -13675,19 +13702,6 @@ onAuthStateChanged(auth, (user) => {
     window.KurzFirebase.stopListeners();
   }
 });
-</script>
-<script>
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./service-worker.js?v=' + APP_VERSION, { scope: './' })
-      .then((reg) => {
-        reg.update().catch(() => {});
-      })
-      .catch((err) => {
-        console.warn('Service Worker registrace selhala:', err);
-      });
-  });
-}
 </script>
 </body>
 </html>
