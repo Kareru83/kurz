@@ -11,7 +11,7 @@
   <link rel="manifest" href="./manifest.json">
   <link rel="icon" type="image/png" sizes="192x192" href="./icon-192x192.png">
   <link rel="apple-touch-icon" href="./icon-192x192.png">
-  <title>Kurz v1.1.0 — Offline PWA</title>
+  <title>Kurz v1.1.1 — Offline PWA</title>
   <style>
     /* ==========================================================================
        1. DESIGN TOKENS & AMOLED / LIGHT THEME
@@ -99,10 +99,12 @@
     }
 
     .app-shell {
-      max-width: 580px;
+      width: 100%;
+      max-width: 1040px;
       margin: 0 auto;
       min-height: 100vh;
       position: relative;
+      box-shadow: var(--shadow);
     }
 
     /* ==========================================================================
@@ -183,8 +185,10 @@
     .bottom-nav {
       position: fixed;
       bottom: 0;
-      left: 0;
-      right: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 1040px;
       z-index: 50;
       background: var(--bg-glass);
       backdrop-filter: blur(16px);
@@ -194,7 +198,8 @@
     }
 
     .bottom-nav-inner {
-      max-width: 580px;
+      width: 100%;
+      max-width: 1040px;
       margin: 0 auto;
       display: grid;
       grid-template-columns: repeat(5, 1fr);
@@ -1186,19 +1191,19 @@
 
     .modal-sheet {
       width: 100%;
-      max-width: 580px;
-      max-height: 90vh;
+      max-width: 760px;
+      max-height: 92vh;
       overflow-y: auto;
       background: var(--bg-surface);
       border-top: 1px solid var(--border-highlight);
       border-radius: 24px 24px 0 0;
-      padding: 18px 16px 34px;
-      animation: slideUp 0.2s ease-out;
+      padding: 20px 22px 32px;
+      animation: slideUp 0.22s ease-out;
     }
 
     @keyframes slideUp {
-      from { transform: translateY(100%); }
-      to { transform: translateY(0); }
+      from { transform: translateY(40px); opacity: 0.7; }
+      to { transform: translateY(0); opacity: 1; }
     }
 
     .toast-box {
@@ -1236,12 +1241,41 @@
       transition: width 0.25s ease;
     }
 
-    /* Tablet na šířku a PC (minimálně dvojnásobná šířka oproti 580px) */
-    @media (min-width: 768px) and (orientation: landscape), (min-width: 1024px) {
-      .app-shell,
-      .bottom-nav-inner,
+/* Tablet (na výšku i na šířku) a PC — shodné chování jako v aplikaci Kvit */
+    @media (min-width: 768px) {
+      .top-header {
+        padding: 12px 24px;
+      }
+      .trip-selector-btn {
+        max-width: 420px;
+      }
+      .view-section {
+        padding: 16px 24px;
+      }
+      .modal-backdrop {
+        align-items: center;
+        padding: 20px;
+      }
       .modal-sheet {
-        max-width: 1200px;
+        border: 1px solid var(--border-highlight);
+        border-radius: 24px;
+        padding: 24px 28px 28px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+      }
+      #walletListContainer {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      #walletListContainer .ticket-card {
+        margin-bottom: 0;
+      }
+      .car-photo-grid {
+        grid-template-columns: repeat(4, 1fr);
+      }
+      .day-map-canvas {
+        max-height: 330px;
+        object-fit: contain;
       }
     }
 
@@ -2568,7 +2602,7 @@
 
     <!-- Informace o verzi a aplikaci -->
     <div style="text-align:center;padding:12px 6px;margin-top:6px;font-size:11.5px;color:var(--text-dim);font-weight:700;">
-      <span>Kurz</span> • <span class="badge primary" style="font-size:11px;padding:1px 7px;">verze 1.1.0</span> • <span>100% Offline PWA</span>
+    <span>Kurz</span> • <span class="badge primary" style="font-size:11px;padding:1px 7px;">verze 1.1.1</span> • <span>100% Offline PWA</span>
     </div>
   </section>
 
@@ -2630,9 +2664,9 @@
 <div id="tripModal" class="modal-backdrop" onclick="if(event.target===this)closeModal('tripModal')">
   <div class="modal-sheet">
     <div class="card-header">
-      <div class="card-title">
+        <div class="card-title">
         <span>🌍 Správa cest</span>
-        <span class="badge primary" style="font-size:11px;">v1.1.0</span>
+        <span class="badge primary" style="font-size:11px;">v1.1.1</span>
       </div>
       <button class="btn btn-sm" onclick="closeModal('tripModal')">Zavřít</button>
     </div>
@@ -3493,7 +3527,7 @@
       <div class="card-header">
         <div class="card-title">💾 Paměť LocalStorage & JSON Záloha</div>
         <div style="display:flex;gap:6px;align-items:center;">
-          <span class="badge primary">v1.1.0</span>
+          <span class="badge primary">v1.1.1</span>
           <span class="badge" id="storageDetailBadge">0 KB / 5120 KB</span>
         </div>
       </div>
@@ -3545,7 +3579,7 @@
    GLOBÁLNÍ PROMĚNNÉ & KONSTANTY
    ============================================================================ */
 const APP_NAME = 'Kurz';
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.1.1';
 const STORAGE_KEY = 'TRAVEL_APP_DATA_V5';
 const THEME_KEY = 'TRAVEL_APP_THEME';
 const UI_LANG_KEY = 'KURZ_UI_LANG';
